@@ -99,6 +99,7 @@ int deny_severity = LOG_NOTICE;
 /* user ID and group ID when running as a daemon */
 char user_name[MAXLEN] = "nobody";
 char group_name[MAXLEN] = "nogroup";
+int tftpd_no_drop_privileges = 0;
 
 /* For special uses, disable source port checking */
 int source_port_checking = 1;
@@ -283,10 +284,10 @@ int main(int argc, char **argv)
                exit(1);
           }
           /* bind the socket to the desired address and port  */
-          if (bind(sockfd, (struct sockaddr*)&sa, sizeof(sa)) < 0)
+          if (bind(sockfd, (struct sockaddr*)&sa, sockaddr_get_struct_size(&sa)) < 0)
           {
-               logger(LOG_ERR, "atftpd: can't bind port %s:%d/udp",
-                      tftpd_addr, tftpd_port);
+               logger(LOG_ERR, "atftpd: can't bind port %s:%d/udp(%s)",
+                      tftpd_addr, tftpd_port, strerror(errno));
                exit(1);
           }
           /*
@@ -299,7 +300,7 @@ int main(int argc, char **argv)
           /* release priviliedge */
           user = getpwnam(user_name);
           group = getgrnam(group_name);
-          if (!user || !group)
+          if (!tftpd_no_drop_privileges && (!user || !group))
           {
                logger(LOG_ERR,
                       "atftpd: can't change identity to %s.%s, exiting.",
@@ -318,26 +319,28 @@ int main(int argc, char **argv)
                     exit(1);
                }
                /* to be able to remove it later */
-               if (chown(pidfile, user->pw_uid, group->gr_gid) != OK) {
-	            logger(LOG_ERR,
-		           "atftpd: failed to chown our pid file %s to owner %s.%s.",
-                           pidfile, user_name, group_name);
+               if (!tftpd_no_drop_privileges && chown(pidfile, user->pw_uid, group->gr_gid) != OK) {
+                    logger(LOG_ERR,
+                       "atftpd: failed to chown our pid file %s to owner %s.%s.",
+                               pidfile, user_name, group_name);
                     exit(1);
-	       }
+               }
           }
 
-	  if (setgid(group->gr_gid) != OK) {
-	      logger(LOG_ERR,
-		      "atftpd: failed to setgid to group %d (%s).",
-		      group->gr_gid, group_name);
-	      exit(1);
-	  }
-	  if (setuid(user->pw_uid) != OK) {
-	      logger(LOG_ERR,
-		      "atftpd: failed to setuid to user %d (%s).",
-		      user->pw_uid, user_name);
-	      exit(1);
-	  }
+          if (!tftpd_no_drop_privileges) {
+              if (setgid(group->gr_gid) != OK) {
+                  logger(LOG_ERR,
+                         "atftpd: failed to setgid to group %d (%s).",
+                         group->gr_gid, group_name);
+                  exit(1);
+              }
+              if (setuid(user->pw_uid) != OK) {
+                  logger(LOG_ERR,
+                         "atftpd: failed to setuid to user %d (%s).",
+                         user->pw_uid, user_name);
+                  exit(1);
+              }
+          }
 
           /* Reopen log file now that we changed user, and that we've
            * open and dup2 the socket. */
@@ -699,7 +702,7 @@ void *tftpd_receive_request(void *arg)
           if (data->sockfd > 0)
           {
                /* bind the socket to the interface */
-               if (bind(data->sockfd, (struct sockaddr *)&to, len) == -1)
+               if (bind(data->sockfd, (struct sockaddr *)&to, sockaddr_get_struct_size(&to)) == -1)
                {
                     logger(LOG_ERR, "bind: %s", strerror(errno));
                     retval = ABORT;
@@ -714,7 +717,7 @@ void *tftpd_receive_request(void *arg)
                /* connect the socket, faster for kernel operation */
                /* this is not a good idea on FreeBSD, because sendto() cannot
                   be used on a connected datagram socket */
-#if !defined(__FreeBSD_kernel__)
+#if !defined(__FreeBSD_kernel__) && !defined(__APPLE__)
                if (connect(data->sockfd,
                            (struct sockaddr *)&data->client_info->client,
                            sizeof(data->client_info->client)) == -1)
@@ -907,6 +910,7 @@ int tftpd_cmd_line_options(int argc, char **argv)
           { "user", 1, NULL, 'U'},
           { "group", 1, NULL, 'G'},
           { "port", 1, NULL, 'P' },
+          { "no-drop-privileges", 0, NULL, 'n'},
           { "bind-address", 1, NULL, 'A'},
           { "mcast-ttl", 1, NULL, OPT_MCAST_TTL },
           { "mcast_ttl", 1, NULL, OPT_MCAST_TTL },
@@ -998,6 +1002,9 @@ int tftpd_cmd_line_options(int argc, char **argv)
                tmp = strtok(NULL, "");
                if (tmp != NULL)
                     Strncpy(group_name, tmp, MAXLEN);
+               break;
+          case 'n':
+               tftpd_no_drop_privileges = 1;
                break;
           case 'G':
                Strncpy(group_name, optarg, MAXLEN);
@@ -1225,6 +1232,7 @@ void tftpd_usage(void)
             "  --no-fork                  : run as a daemon, don't fork\n"
             "  --user <user[.group]>      : default is nobody\n"
             "  --group <group>            : default is nogroup\n"
+            "  --no-drop-privileges       : run as current user\n"
             "  --port <port>              : port on which atftp listen\n"
             "  --bind-address <IP>        : local address atftpd listen to\n"
             "  --mcast-ttl                : ttl to used for multicast\n"

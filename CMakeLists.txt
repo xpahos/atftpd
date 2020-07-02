@@ -1,0 +1,131 @@
+cmake_minimum_required(VERSION 2.18)
+project(atftp)
+
+find_library(PCRE_LIBRARY pcre)
+find_library(PTHREAD_LIBRARY pthread)
+find_library(READLINE_LIBRARY readline)
+find_library(WRAP_LIBRARY wrap)
+
+find_path(PCRE_INCLUDE_DIR pcre.h)
+find_path(READLINE_INCLUDE_DIR readline/readline.h)
+find_path(WRAP_INCLUDE_DIR tcpd.h)
+
+option(WITH_ARGZ "Build with systel glibc argz support" ON)
+option(WITH_PCRE "Build with PCRE support" ON)
+option(WITH_READLINE "Build with readline library support" ON)
+option(WITH_MTFTP "Build with MTFTP protocol support" ON)
+option(WITH_WRAP "Build with libwrap support" OFF)
+
+if(WITH_PCRE)
+    add_definitions(-DHAVE_PCRE=1)
+endif()
+
+if(WITH_READLINE)
+    add_definitions(-DHAVE_READLINE=1)
+    add_definitions(-DHAVE_RL_COMPLETION_MATCHES=1)
+    add_definitions(-DHAVE_COMPLETION_MATCHES=1)
+endif()
+
+if(WITH_MTFTP)
+    add_definitions(-DHAVE_MTFTP=1)
+endif()
+
+if(WITH_WRAP)
+    add_definitions(-DHAVE_WRAP=1)
+endif()
+
+IF(WITH_ARGZ)
+    add_definitions(-DHAVE_ARGZ=1)
+endif()
+
+set(SERVER_LIBS "")
+set(SERVER_INCLUDES "")
+
+set(CLIENT_LIBS "")
+set(CLIENT_INCLUDES "")
+
+if(PCRE_LIBRARY AND PCRE_INCLUDE_DIR)
+    message(STATUS "PCRE lib: ${PCRE_LIBRARY}")
+    message(STATUS "PCRE include directory: ${PCRE_INCLUDE_DIR}")
+    list(APPEND SERVER_LIBS ${PCRE_LIBRARY})
+    list(APPEND SERVER_INCLUDES ${PCRE_INCLUDE_DIR})
+else()
+    if (WITH_PCRE)
+        message(FATAL_ERROR "PCRE not found")
+    else()
+        message(STATUS "PCRE is not used")
+    endif()
+endif()
+
+if(PTHREAD_LIBRARY)
+    message(STATUS "PTHREAD lib: ${PTHREAD_LIBRARY}")
+    list(APPEND SERVER_LIBS ${PTHREAD_LIBRARY})
+else()
+    message(FATAL_ERROR "PTHREAD not found")
+endif()
+
+if(READLINE_LIBRARY AND READLINE_INCLUDE_DIR)
+    message(STATUS "READLINE lib: ${READLINE_LIBRARY}")
+    message(STATUS "READLINE include directory: ${READLINE_INCLUDE_DIR}")
+    list(APPEND CLIENT_LIBS ${READLINE_LIBRARY})
+    list(APPEND CLIENT_INCLUDES ${READLINE_INCLUDE_DIR})
+else()
+    IF(WITH_READLINE)
+        message(FATAL_ERROR "READLINE not found")
+    else()
+        message(STATUS "READLINE is not used")
+    endif()
+endif()
+
+if(WRAP_LIBRARY AND WRAP_INCLUDE_DIR)
+    message(STATUS "WRAP lib: ${WRAP_LIBRARY}")
+    message(STATUS "WRAP include directory: ${WRAP_INCLUDE_DIR}")
+    list(APPEND SERVER_LIBS ${WRAP_LIBRARY})
+    list(APPEND SERVER_INCLUDES ${WRAP_INCLUDE_DIR})
+else()
+    IF(WITH_WRAP)
+        message(FATAL_ERROR "WRAP not found")
+    else()
+        message(STATUS "WRAP is not used")
+    endif()
+endif()
+
+set(SHARED_SOURCES logger.c options.c tftp_io.c tftp_def.c)
+set(SHARED_HEADERS logger.h options.h tftp_io.h tftp_def.h)
+
+if(NOT WITH_ARGZ)
+    message(STATUS "Building without system glibc argz")
+    list(APPEND SHARED_SOURCES argz.c)
+    list(APPEND SHARED_HEADERS argz.h)
+endif()
+
+set(SERVER_SOURCES stats.c tftpd_pcre.c tftpd_file.c tftpd_list.c tftpd_mcast.c tftpd_mtftp.c)
+set(SERVER_HEADERS stats.h tftpd_pcre.h tftpd_mtftp.h)
+
+set(CLIENT_SOURCES tftp_file.c tftp_mtftp.c)
+
+if(USE_SANITIZER)
+    if(UNIX)
+        if(USE_SANITIZER MATCHES "([Aa]ddress)")
+            message(STATUS "Building with ASAN")
+            string(APPEND CMAKE_C_FLAGS " -fsanitize=address ")
+        endif()
+    else()
+        message(FATAL_ERROR "Could not use sanitizer in non-Unix environment")
+    endif()
+
+    string(APPEND CMAKE_C_FLAGS " -fno-omit-frame-pointer ")
+endif()
+
+enable_testing()
+add_subdirectory(test)
+
+add_executable(atftpd ${SHARED_SOURCES} ${SHARED_HEADERS} ${SERVER_SOURCES} ${SERVER_HEADERS} tftpd.c tftpd.h)
+target_link_libraries(atftpd ${SERVER_LIBS})
+target_include_directories(atftpd PRIVATE ${SERVER_INCLUDES})
+
+add_executable(atftp ${SHARED_SOURCES} ${SHARED_HEADERS} ${CLIENT_SOURCES} tftp.c tftp.h)
+target_link_libraries(atftp ${CLIENT_LIBS})
+target_include_directories(atftp PRIVATE ${CLIENT_INCLUDES})
+
+

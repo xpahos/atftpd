@@ -22,6 +22,8 @@
 #include <string.h>
 #include <errno.h>
 #include <arpa/inet.h>
+#include <netinet/in.h>
+
 #include "tftp_def.h"
 #include "options.h"
 #include "logger.h"
@@ -133,51 +135,12 @@ int print_eng(double value, char *string, int size, char *format)
 /*
  * This is a strncpy function that take care of string NULL termination
  */
-inline char *Strncpy(char *to, const char *from, size_t size)
+char *Strncpy(char *to, const char *from, size_t size)
 {
      strncpy(to, from, size);
      if (size>0) 
           to[size-1] = '\000';
      return to;
-}
-
-
-/* 
- * gethostbyname replacement that is reentrant. This function is copyied
- * from the libc manual.
- */
-int Gethostbyname(char *addr, struct hostent *host)
-{
-     struct hostent *hp;
-     char *tmpbuf;
-     size_t tmpbuflen;
-     int res;
-     int herr;
-     
-     tmpbuflen = 1024;
-
-     if ((tmpbuf = (char *)malloc(tmpbuflen)) == NULL)
-          return ERR;
-
-     res = gethostbyname_r(addr, host, tmpbuf, tmpbuflen, &hp, &herr);
-
-     free(tmpbuf);
-
-     /*  Check for errors. */
-     if (res != 0)
-     {
-          logger(LOG_ERR, "%s: %d: gethostbyname_r: %s",
-                 __FILE__, __LINE__, strerror(herr));
-          return ERR;
-     }
-     if (hp != host)
-     {
-          logger(LOG_ERR, "%s: %d: abnormal return value",
-                 __FILE__, __LINE__);
-          return ERR;
-     }
-
-     return OK;
 }
 
 char *
@@ -310,4 +273,14 @@ sockaddr_set_addrinfo(struct sockaddr_storage *ss, const struct addrinfo *ai)
      assert(sizeof(*ss) >= ai->ai_addrlen);
      memcpy(ss, ai->ai_addr, ai->ai_addrlen);
      return 0;
+}
+
+size_t
+sockaddr_get_struct_size(struct sockaddr_storage *ss) {
+    if (ss->ss_family == AF_INET)
+        return sizeof(struct sockaddr_in);
+    else if (ss->ss_family == AF_INET6)
+        return sizeof(struct sockaddr_in6);
+    else
+        assert(!"sockaddr_set_port: unsupported address family");
 }

@@ -38,7 +38,9 @@
 #ifndef _ARGZ_H
 #define _ARGZ_H	1
 
+#if __linux__
 #include <features.h>
+#endif
 
 #define __need_error_t
 #include <errno.h>
@@ -50,6 +52,11 @@
 
 #ifndef __error_t_defined
 typedef int error_t;
+#endif
+
+#ifdef __APPLE__
+#define __THROW __attribute__ ((__nothrow__))
+#define __attribute_pure__ __attribute__ ((__pure__))
 #endif
 
 

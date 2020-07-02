@@ -455,9 +455,10 @@ int set_peer(int argc, char **argv)
           err = sockaddr_set_addrinfo(&data.sa_peer, addrinfo);
      if (err == 0)
      {
-          Strncpy(data.hostname, addrinfo->ai_canonname,
-                  sizeof(data.hostname));
-          data.hostname[sizeof(data.hostname)-1] = 0;
+          if (addrinfo->ai_canonname != NULL) {
+              Strncpy(data.hostname, addrinfo->ai_canonname,
+                      sizeof(data.hostname));
+          }
           freeaddrinfo(addrinfo);
      }
      else

@@ -201,7 +201,7 @@ int tftpd_list_find_multicast_server_and_add(struct thread_data **thread,
      return 0;
 }
 
-inline void tftpd_clientlist_ready(struct thread_data *thread)
+void tftpd_clientlist_ready(struct thread_data *thread)
 {
      pthread_mutex_lock(&thread->client_mutex);
      thread->client_ready = 1;
