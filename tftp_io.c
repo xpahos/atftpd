@@ -85,9 +85,11 @@ int tftp_send_request(int socket, struct sockaddr_storage *sa, short type,
      }
      /* send the buffer */
      result = sendto(socket, data_buffer, buf_index, 0,
-                     (struct sockaddr *)sa, sizeof(*sa));
-     if (result < 0)
-          return ERR;
+                     (struct sockaddr *)sa, sockaddr_get_struct_size(sa));
+     if (result < 0) {
+         logger(LOG_ERR, "tftp_send_request: %s", strerror(errno));
+         return ERR;
+     }
      return OK;
 }
 
@@ -106,9 +108,11 @@ int tftp_send_ack(int socket, struct sockaddr_storage *sa, long block_number)
      tftphdr.th_block = htons((short)block_number);
 
      result = sendto(socket, &tftphdr, 4, 0, (struct sockaddr *)sa,
-                     sizeof(*sa));
-     if (result < 0)
-          return ERR;
+                     sockaddr_get_struct_size(sa));
+     if (result < 0) {
+         logger(LOG_ERR, "tftp_send_ack: %s", strerror(errno));
+         return ERR;
+     }
      return OK;
 }
 
@@ -145,9 +149,11 @@ int tftp_send_oack(int socket, struct sockaddr_storage *sa, struct tftp_opt *tft
      }
      /* send the buffer */
      result = sendto(socket, buffer, index, 0, (struct sockaddr *)sa,
-                     sizeof(*sa));
-     if (result < 0)
-          return ERR;
+                     sockaddr_get_struct_size(sa));
+     if (result < 0) {
+         logger(LOG_ERR, "tftp_send_oack: %s", strerror(errno));
+         return ERR;
+     }
      return OK;
 }
 
@@ -173,9 +179,11 @@ int tftp_send_error(int socket, struct sockaddr_storage *sa, short err_code,
      size = 4 + strlen(tftp_errmsg[err_code]) + 1;
 
      result = sendto(socket, tftphdr, size, 0, (struct sockaddr *)sa,
-                     sizeof(*sa));
-     if (result < 0)
-          return ERR;
+                     sockaddr_get_struct_size(sa));
+     if (result < 0) {
+         logger(LOG_ERR, "tftp_send_error: %s", strerror(errno));
+         return ERR;
+     }
      return OK;
 }
 
@@ -195,9 +203,11 @@ int tftp_send_data(int socket, struct sockaddr_storage *sa, long block_number,
      tftphdr->th_block = htons((short)block_number);
 
      result = sendto(socket, data, size, 0, (struct sockaddr *)sa,
-                     sizeof(*sa));
-     if (result < 0)
-          return ERR;
+                     sockaddr_get_struct_size(sa));
+     if (result < 0) {
+         logger(LOG_ERR, "tftp_send_data: %s", strerror(errno));
+         return ERR;
+     }
      return OK;
 }
 

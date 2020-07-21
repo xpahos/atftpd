@@ -47,12 +47,16 @@
 #define OPT_SIZE     12
 #define VAL_SIZE     MAXLEN
 
+#ifdef __APPLE__
+#define IPV6_ADD_MEMBERSHIP IPV6_JOIN_GROUP
+#define IPV6_DROP_MEMBERSHIP IPV6_LEAVE_GROUP
+#endif
+
 extern char *tftp_errmsg[9];
 
 int timeval_diff(struct timeval *res, struct timeval *t1, struct timeval *t0);
 int print_eng(double value, char *string, int size, char *format);
-inline char *Strncpy(char *to, const char *from, size_t size);
-int Gethostbyname(char *addr, struct hostent *host);
+char *Strncpy(char *to, const char *from, size_t size);
 
 char *sockaddr_print_addr(const struct sockaddr_storage *, char *, size_t);
 #define SOCKADDR_PRINT_ADDR_LEN INET6_ADDRSTRLEN
@@ -74,5 +78,8 @@ sockaddr_get_mreq(const struct sockaddr_storage *, union ip_mreq_storage *);
 
 int
 sockaddr_set_addrinfo(struct sockaddr_storage *ss, const struct addrinfo *ai);
+
+size_t
+sockaddr_get_struct_size(struct sockaddr_storage *ss);
 
 #endif

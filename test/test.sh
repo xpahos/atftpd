@@ -6,8 +6,8 @@
 
 # assume we are called in the source tree after the build
 # so binaries are one dir up
-ATFTP=../atftp
-ATFTPD=../atftpd
+ATFTP=./atftp
+ATFTPD=./atftpd
 
 #
 # set some default values for variables used in this script
@@ -20,7 +20,11 @@ ATFTPD=../atftpd
 : ${TEMPDIR:="/tmp"}
 
 # Number of parallel clients for high server load test
+if [[ "$OSTYPE" == "darwin"* ]]; then
+: ${NBSERVER:=100}
+else
 : ${NBSERVER:=200}
+fi
 
 # Some Tests need root access (e.g. to mount a tempfs filesystem)
 # and need sudo for this, so maybe the script asks for a password
@@ -37,6 +41,10 @@ DIRECTORY=$(mktemp -d ${TEMPDIR}/atftp-test.XXXXXX)
 SERVER_ARGS="--daemon --no-fork --logfile=/dev/stdout --port=$PORT --verbose=6 $DIRECTORY"
 SERVER_LOG=./atftpd.log
 
+if [[ ${UID} -ne 0 && "$OSTYPE" == "darwin"* ]]; then
+    SERVER_ARGS="--no-drop-privileges ${SERVER_ARGS}"
+fi
+
 # check if we are root or not root
 # if this test is executed by a normal user, atftpd will fail if we do not use our own user+group
 if [ ${UID} -ne 0 ]; then
@@ -47,7 +55,10 @@ ERROR=0
 
 # verify that atftp and atftpd are executable
 if [ -x "$ATFTP" ]; then
-	echo "Using atftp from build directory"
+	echo "Using atftp from current directory"
+elif [ -x "../$ATFTP" ]; then
+    echo "Using atftp from build directory"
+    ATFTP=../atftp
 else
 	ATFTP=$(which atftp >/dev/null)
 	if [ -x "$ATFTP" ]; then
@@ -59,7 +70,10 @@ else
 
 fi
 if [ -x $ATFTPD ]; then
-	echo "Using atftpd from build directory"
+	echo "Using atftpd from current directory"
+elif [ -x "../$ATFTPD" ]; then
+    echo "Using atftpd from build directory"
+    ATFTPD=../atftpd
 else
 	ATFTPD=$(which atftpd >/dev/null)
 	if [ -x "$ATFTPD" ]; then
@@ -163,9 +177,9 @@ dd if=/dev/urandom of=$DIRECTORY/$READ_511 bs=1 count=511 2>/dev/null
 dd if=/dev/urandom of=$DIRECTORY/$READ_512 bs=1 count=512 2>/dev/null
 dd if=/dev/urandom of=$DIRECTORY/$READ_2K bs=1 count=2048 2>/dev/null
 dd if=/dev/urandom of=$DIRECTORY/$READ_BIG bs=1 count=51111 2>/dev/null
-dd if=/dev/urandom of=$DIRECTORY/$READ_128K bs=1K count=128 2>/dev/null
-dd if=/dev/urandom of=$DIRECTORY/$READ_1M bs=1M count=1 2>/dev/null
-dd if=/dev/urandom of=$DIRECTORY/$READ_101M bs=1M count=101 2>/dev/null
+dd if=/dev/urandom of=$DIRECTORY/$READ_128K bs=1024 count=128 2>/dev/null
+dd if=/dev/urandom of=$DIRECTORY/$READ_1M bs=1048576 count=1 2>/dev/null
+dd if=/dev/urandom of=$DIRECTORY/$READ_101M bs=1048576 count=101 2>/dev/null
 echo "done"
 
 start_server
@@ -190,9 +204,21 @@ test_get_put $READ_BIG --option "blksize 8"
 test_get_put $READ_BIG --option "blksize 256"
 test_get_put $READ_1M --option "blksize 1428"
 test_get_put $READ_1M --option "blksize 1533"
-test_get_put $READ_1M --option "blksize 16000"
-test_get_put $READ_1M --option "blksize 40000"
-test_get_put $READ_1M --option "blksize 65464"
+skip_large_blksize=false
+# Default value for net.inet.udp.maxdgram is 9216 on OS X Catalina
+if [[ "$OSTYPE" == "darwin"* ]]; then
+  if [[ $(sysctl -n net.inet.udp.maxdgram) -lt 65464 ]]; then
+    echo
+    echo "Current net.inet.udp.maxdgram less than 16000 skipping tests with larger blocksize"
+    echo "Please set sysctl -w net.inet.udp.maxdgram 65536 and rerun tests"
+    skip_large_blksize=true
+  fi
+fi
+if [[ "${skip_large_blksize}" == false ]]; then
+  test_get_put $READ_1M --option "blksize 16000"
+  test_get_put $READ_1M --option "blksize 40000"
+  test_get_put $READ_1M --option "blksize 65464"
+fi
 
 # do not run the following test as it will hang...
 
@@ -281,7 +307,7 @@ echo -n "Test returncode after timeout when server is unreachable ... "
 $ATFTP --put --local-file "$DIRECTORY/$READ_2K" 127.0.0.77 2>out
 Retval=$?
 echo -n "Returncode $Retval: "
-if [ $Retval -eq 255 ]; then
+if [[ $Retval -eq 255 ]]; then
 	echo "OK"
 else
 	echo "ERROR"
@@ -467,7 +493,7 @@ else
     rm -f out
     rm -f $SERVER_LOG $DIRECTORY/$READ_0 $DIRECTORY/$READ_511 $DIRECTORY/$READ_512
     rm -f $DIRECTORY/$READ_2K $DIRECTORY/$READ_BIG $DIRECTORY/$READ_128K $DIRECTORY/$READ_1M
-    rm -f $DIRECTORY/$WRITE
+    rm -f $DIRECTORY/$READ_101M $DIRECTORY/$WRITE
     rmdir $DIRECTORY
 fi
 
